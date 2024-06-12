@@ -44,46 +44,41 @@ class TGFS(Operations):
             return matches.groups()
 
     def __cache_file_attrs__(self, message):
-        print(message)
-        _k = (message.chat_id, message.id)
-        self.file_diz[_k] = {
-            'file_name': message.file.name,
-            'size': message.file.size,
-            'timestamp': int(message.media.document.date.timestamp()),
-            }
-        return self.file_diz[_k]
+        if self.file_diz.get(message.chat_id) is None:
+            self.file_diz[message.chat_id] = {}
+        if message.file:
+            self.file_diz[message.chat_id][message.id] = {
+                'file_name': message.file.name,
+                'size': message.file.size,
+                'timestamp': int(message.media.document.date.timestamp()),
+                }
+            return self.file_diz[message.chat_id][message.id]
+        else:
+            logging.error(f'Error while processing chat_id {message.chat_id} message_id {message.id}')
 
     def getattr(self, path, fh=None):
         logging.info(f'getattr: {path}, {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
         if _media:
-            _k = (int(_dialog_id), int(_message_id))
-            if _attrs := self.file_diz.get(_k):
+            _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
+            if _attrs is None:
+                for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
+                    _attrs = self.__cache_file_attrs__(message)
+            if _media == _attrs['file_name']:
                 return self.default_file_attrs | {
                     'st_atime': _attrs['timestamp'],
                     'st_ctime': _attrs['timestamp'],
                     'st_mtime': _attrs['timestamp'],
                     'st_size': _attrs['size'],
                     }
-            else:
-                for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
-                    _attrs = self.__cache_file_attrs__(message)
-                    return self.default_file_attrs | {
-                        'st_atime': _attrs['timestamp'],
-                        'st_ctime': _attrs['timestamp'],
-                        'st_mtime': _attrs['timestamp'],
-                        'st_size': _attrs['size'],
-                        }
         else:
             return self.default_folder_attrs
 
     def readdir(self, path, fh):
         logging.info(f'readdir: {path}, {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
-
         if _message_id:
-            _k = (int(_dialog_id), int(_message_id))
-            _attrs = self.file_diz.get(_k)
+            _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
             if _attrs is None:
                 for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
                     _attrs = self.__cache_file_attrs__(message)
@@ -91,14 +86,22 @@ class TGFS(Operations):
             else:
                 yield(_attrs['file_name'])
         elif _dialog_id:
+
             for message in self.client.iter_messages(entity = int(_dialog_id), filter = InputMessagesFilterDocument):
-                _k = (int(_dialog_id), message.id)
-                if self.file_diz.get(_k) is None:
+                if self.file_diz.get(int(_dialog_id), {}).get(message.id) is None:
                     self.__cache_file_attrs__(message)
-                yield(str(message.id))
+                else:
+                    break
+            for _message_id in self.file_diz.get(int(_dialog_id)).keys():
+                yield(str(_message_id))
         else:
             for dialog in self.client.iter_dialogs():
-                yield(str(dialog.id))
+                if self.file_diz.get(int(dialog.id)) is None:
+                    self.file_diz[int(dialog.id)] = {}
+                else:
+                    break
+            for _dialog_id in self.file_diz.keys():
+                yield(str(_dialog_id))
 
     def open(self, path, flags):
         logging.info(f'open: {path} - {flags}')
