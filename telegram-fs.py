@@ -43,6 +43,15 @@ class TGFS(Operations):
         if matches := re.search('/([^/]*)(?:/([^/]*))?(?:/([^/]*))?', path):
             return matches.groups()
 
+    def __update_chat_cache__(self, chat_id, message_id = None):
+        for message in self.client.iter_messages(entity = int(chat_id), filter = InputMessagesFilterDocument):
+            if self.file_diz.get(int(chat_id), {}).get(message.id) is None:
+                self.__cache_file_attrs__(message)
+            else:
+                break
+        if message_id:
+            return self.file_diz.get(int(chat_id)).get(int(message_id))
+
     def __cache_file_attrs__(self, message):
         if self.file_diz.get(message.chat_id) is None:
             self.file_diz[message.chat_id] = {}
@@ -62,8 +71,7 @@ class TGFS(Operations):
         if _media:
             _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
             if _attrs is None:
-                for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
-                    _attrs = self.__cache_file_attrs__(message)
+                _attrs = self.__update_chat_cache__(int(_dialog_id), int(_message_id))
             if _media == _attrs['file_name']:
                 return self.default_file_attrs | {
                     'st_atime': _attrs['timestamp'],
@@ -80,28 +88,17 @@ class TGFS(Operations):
         if _message_id:
             _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
             if _attrs is None:
-                for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
-                    _attrs = self.__cache_file_attrs__(message)
-                    yield(_attrs['file_name'])
-            else:
-                yield(_attrs['file_name'])
+                _attrs = self.__update_chat_cache__(_dialog_id, _message_id)
+            yield(_attrs['file_name'])
         elif _dialog_id:
-
-            for message in self.client.iter_messages(entity = int(_dialog_id), filter = InputMessagesFilterDocument):
-                if self.file_diz.get(int(_dialog_id), {}).get(message.id) is None:
-                    self.__cache_file_attrs__(message)
-                else:
-                    break
-            for _message_id in self.file_diz.get(int(_dialog_id)).keys():
+            self.__update_chat_cache__(_dialog_id)
+            for _message_id in self.file_diz.get(int(_dialog_id), {}).keys():
                 yield(str(_message_id))
         else:
             for dialog in self.client.iter_dialogs():
-                if self.file_diz.get(int(dialog.id)) is None:
-                    self.file_diz[int(dialog.id)] = {}
-                else:
-                    break
-            for _dialog_id in self.file_diz.keys():
-                yield(str(_dialog_id))
+                yield(str(dialog.id))
+        for _ in ['.', '..']:
+            yield(_)
 
     def open(self, path, flags):
         logging.info(f'open: {path} - {flags}')
