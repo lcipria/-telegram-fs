@@ -36,6 +36,7 @@ class TGFS(Operations):
     def __init__(self):
         self.client = TelegramClient(config.name, config.api_id, config.api_hash, proxy=config.proxy)
         self.file_diz = {}
+        self.client.start()
         self.client.connect()
         print('started')
 
@@ -115,7 +116,7 @@ class TGFS(Operations):
                 return chunk
 
 def main(mountpoint):
-    FUSE(TGFS(), mountpoint, nothreads=True, foreground=True)
+    FUSE(TGFS(), mountpoint, nothreads=True, foreground=True, max_read=512 * 1024)
 
 if __name__ == '__main__':
     main(sys.argv[1])
