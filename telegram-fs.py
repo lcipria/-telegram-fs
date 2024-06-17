@@ -4,8 +4,9 @@ from telethon.tl.types import InputMessagesFilterDocument
 import config
 import errno
 import logging
-import sys
+import math
 import re
+import sys
 
 class TGFS(Operations):
     @property
@@ -66,6 +67,13 @@ class TGFS(Operations):
         else:
             logging.error(f'Error while processing chat_id {message.chat_id} message_id {message.id}')
 
+    def __iter_download(self, file, offset, limit, request_size):
+        n = 0
+        for chunk in self.client.iter_download(file = file, offset = offset, request_size = request_size):
+            yield chunk
+            if (n := n+1) >= limit:
+                break
+
     def getattr(self, path, fh=None):
         logging.info(f'getattr: {path}, {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
@@ -111,12 +119,28 @@ class TGFS(Operations):
     def read(self, path, size, offset, fh):
         logging.info(f'read: {path} - {size} - {offset} - {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
+        buffer = bytearray()
         for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
-            for chunk in self.client.iter_download(file = message, offset = offset, limit = 1, request_size = size):
-                return chunk
+            _request_size = 2**min(max(12, math.ceil(math.log2(size))), 20)
+            _limit = math.ceil(size / _request_size)
+            for chunk in self.__iter_download(file = message, limit = _limit, offset = offset, request_size = _request_size):
+                buffer += chunk
+            return bytes(buffer[:size])
+
+    # def read(self, path, size, offset, fh):
+    #     logging.info(f'read: {path} - {size} - {offset} - {fh}')
+    #     _dialog_id, _message_id, _media = self.__get__(path)
+    #     buffer = bytearray()
+    #     for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
+    #         _request_size = 2**min(max(12, math.ceil(math.log2(size))), 20)
+    #         for chunk in self.client.iter_download(file = message, offset = offset, request_size = _request_size):
+    #             buffer += chunk
+    #             if len(buffer) >= size:
+    #                 break
+    #         return bytes(buffer[:size])
 
 def main(mountpoint):
-    FUSE(TGFS(), mountpoint, nothreads=True, foreground=True, max_read=512 * 1024)
+    FUSE(TGFS(), mountpoint, nothreads=True, foreground=True)
 
 if __name__ == '__main__':
     main(sys.argv[1])
