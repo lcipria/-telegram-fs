@@ -77,6 +77,7 @@ class TGFS(Operations):
     def getattr(self, path, fh=None):
         logging.info(f'getattr: {path}, {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
+        _dialog_id = re.findall('-?[0-9]+', _dialog_id)[0] if _dialog_id else _dialog_id
         if _media:
             _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
             if _attrs is None:
@@ -94,6 +95,7 @@ class TGFS(Operations):
     def readdir(self, path, fh):
         logging.info(f'readdir: {path}, {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
+        _dialog_id = re.findall('-?[0-9]+', _dialog_id)[0] if _dialog_id else _dialog_id
         if _message_id:
             _attrs = self.file_diz.get(int(_dialog_id), {}).get(int(_message_id))
             if _attrs is None:
@@ -119,6 +121,7 @@ class TGFS(Operations):
     def read(self, path, size, offset, fh):
         logging.info(f'read: {path} - {size} - {offset} - {fh}')
         _dialog_id, _message_id, _media = self.__get__(path)
+        _dialog_id = re.findall('-?[0-9]+', _dialog_id)[0] if _dialog_id else _dialog_id
         buffer = bytearray()
         for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
             _request_size = 2**min(max(12, math.ceil(math.log2(size))), 20)
@@ -130,6 +133,7 @@ class TGFS(Operations):
     # def read(self, path, size, offset, fh):
     #     logging.info(f'read: {path} - {size} - {offset} - {fh}')
     #     _dialog_id, _message_id, _media = self.__get__(path)
+    #     _dialog_id = re.findall('-?[0-9]+', _dialog_id)[0] if _dialog_id else _dialog_id
     #     buffer = bytearray()
     #     for message in self.client.iter_messages(entity = int(_dialog_id), ids=int(_message_id), filter = InputMessagesFilterDocument):
     #         _request_size = 2**min(max(12, math.ceil(math.log2(size))), 20)
